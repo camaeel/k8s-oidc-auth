@@ -14,7 +14,6 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"os"
-	"strings"
 	"time"
 
 	"github.com/coreos/go-oidc/v3/oidc"
@@ -99,7 +98,7 @@ func cmd() *cobra.Command {
 		debug     bool
 	)
 	c := cobra.Command{
-		Use:   "example-app",
+		Use:   "k8s-oidc-auth",
 		Short: "An example OpenID Connect client",
 		Long:  "",
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -176,7 +175,6 @@ func cmd() *cobra.Command {
 			a.verifier = provider.Verifier(&oidc.Config{ClientID: a.clientID})
 
 			http.HandleFunc("/", a.handleIndex)
-			http.HandleFunc("/login", a.handleLogin)
 			http.HandleFunc(u.Path, a.handleCallback)
 
 			switch listenURL.Scheme {
@@ -195,7 +193,7 @@ func cmd() *cobra.Command {
 	c.Flags().StringVar(&a.clientSecret, "client-secret", "ZXhhbXBsZS1hcHAtc2VjcmV0", "OAuth2 client secret of this application.")
 	c.Flags().StringVar(&a.redirectURI, "redirect-uri", "http://127.0.0.1:5555/callback", "Callback URL for OAuth2 responses.")
 	c.Flags().StringVar(&issuerURL, "issuer", "http://127.0.0.1:5556/dex", "URL of the OpenID Connect issuer.")
-	c.Flags().StringVar(&listen, "listen", "http://127.0.0.1:5555", "HTTP(S) address to listen at.")
+	c.Flags().StringVar(&listen, "listen", "http://0.0.0.0:5555", "HTTP(S) address to listen at.")
 	c.Flags().StringVar(&tlsCert, "tls-cert", "", "X509 cert file to present when serving HTTPS.")
 	c.Flags().StringVar(&tlsKey, "tls-key", "", "Private key for the HTTPS cert.")
 	c.Flags().StringVar(&rootCAs, "issuer-root-ca", "", "Root certificate authorities for the issuer. Defaults to host certs.")
@@ -211,7 +209,10 @@ func main() {
 }
 
 func (a *app) handleIndex(w http.ResponseWriter, r *http.Request) {
-	renderIndex(w)
+	var scopes []string
+	authCodeURL := ""
+	scopes = append(scopes, "openid", "profile", "email")
+	http.Redirect(w, r, authCodeURL, http.StatusSeeOther)
 }
 
 func (a *app) oauth2Config(scopes []string) *oauth2.Config {
@@ -222,40 +223,6 @@ func (a *app) oauth2Config(scopes []string) *oauth2.Config {
 		Scopes:       scopes,
 		RedirectURL:  a.redirectURI,
 	}
-}
-
-func (a *app) handleLogin(w http.ResponseWriter, r *http.Request) {
-	var scopes []string
-	if extraScopes := r.FormValue("extra_scopes"); extraScopes != "" {
-		scopes = strings.Split(extraScopes, " ")
-	}
-	var clients []string
-	if crossClients := r.FormValue("cross_client"); crossClients != "" {
-		clients = strings.Split(crossClients, " ")
-	}
-	for _, client := range clients {
-		scopes = append(scopes, "audience:server:client_id:"+client)
-	}
-	connectorID := ""
-	if id := r.FormValue("connector_id"); id != "" {
-		connectorID = id
-	}
-
-	authCodeURL := ""
-	scopes = append(scopes, "openid", "profile", "email")
-	if r.FormValue("offline_access") != "yes" {
-		authCodeURL = a.oauth2Config(scopes).AuthCodeURL(exampleAppState)
-	} else if a.offlineAsScope {
-		scopes = append(scopes, "offline_access")
-		authCodeURL = a.oauth2Config(scopes).AuthCodeURL(exampleAppState)
-	} else {
-		authCodeURL = a.oauth2Config(scopes).AuthCodeURL(exampleAppState, oauth2.AccessTypeOffline)
-	}
-	if connectorID != "" {
-		authCodeURL = authCodeURL + "&connector_id=" + connectorID
-	}
-
-	http.Redirect(w, r, authCodeURL, http.StatusSeeOther)
 }
 
 func (a *app) handleCallback(w http.ResponseWriter, r *http.Request) {
@@ -335,5 +302,14 @@ func (a *app) handleCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	renderToken(w, a.redirectURI, rawIDToken, accessToken, token.RefreshToken, buff.String())
+	var customClaims struct {
+		Email    string `json:"email"`
+		Verified bool   `json:"email_verified"`
+	}
+
+	if err := idToken.Claims(&customClaims); err != nil {
+		return
+	}
+
+	renderToken(w, a.redirectURI, rawIDToken, accessToken, token.RefreshToken, customClaims.Email, buff.String())
 }
