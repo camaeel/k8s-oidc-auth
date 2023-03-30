@@ -325,5 +325,5 @@ func (a *app) handleCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	renderToken(w, a.redirectURI, rawIDToken, accessToken, token.RefreshToken, customClaims.Email, buff.String())
+	renderToken(w, a.redirectURI, rawIDToken, accessToken, token.RefreshToken, buff.String(), customClaims.Email)
 }

@@ -35,7 +35,7 @@ pre {
 	{{ if .RefreshToken }}
     <p> Refresh Token: <pre><code>{{ .RefreshToken }}</code></pre></p>
 	{{ end }}
-		<p>kubectl config set-credentials {{ .Claims }} --token={{ .IDToken }}</p>
+		<p>kubectl config set-credentials {{ .Email }} --token={{ .IDToken }}</p>
   </body>
 </html>
 `))
