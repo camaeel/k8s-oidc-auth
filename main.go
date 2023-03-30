@@ -175,6 +175,7 @@ func cmd() *cobra.Command {
 			a.verifier = provider.Verifier(&oidc.Config{ClientID: a.clientID})
 
 			http.HandleFunc("/", a.handleIndex)
+			http.HandleFunc("/livez", a.liveness)
 			http.HandleFunc(u.Path, a.handleCallback)
 
 			switch listenURL.Scheme {
@@ -223,6 +224,10 @@ func (a *app) oauth2Config(scopes []string) *oauth2.Config {
 		Scopes:       scopes,
 		RedirectURL:  a.redirectURI,
 	}
+}
+
+func (a *app) liveness(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(200)
 }
 
 func (a *app) handleCallback(w http.ResponseWriter, r *http.Request) {
